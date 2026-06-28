@@ -84,3 +84,20 @@ We use a `while(true)` loop to continuously read (`recv`) data from the `client_
 memset(buffer, 0, sizeof(buffer)); 
 ```
 If you don't clean out your memory buffer array on every loop iteration, old messages will merge with new messages. If the first message was `"HELLO"` and the second message was `"HI"`, without clearing the buffer, the second message would print as `"HULLO"` because the old letters weren't erased!
+
+---
+
+## 4. Why `closesocket()` is Crucial
+
+When a client disconnects, or when we are done with a client, we must call `closesocket(client_socket)` (or `close()` on Linux/Mac). 
+Sockets are limited OS resources (often called File Descriptors). A typical OS might limit a process to a few thousand file descriptors at a time. If you forget to close sockets, you create a **socket leak**. Eventually, `accept()` will fail because the OS runs out of room to create new meeting rooms, causing your database to reject all new connections.
+
+---
+
+## 5. The Next Step: Overcoming the Blocking Problem
+
+The simple server architecture described above has a massive flaw: it is **synchronous and blocking**.
+Because `accept()` and `recv()` halt the program until something happens, a basic single-threaded server can only handle **one client at a time**. If Client A connects, Client B cannot connect until Client A is finished and disconnects.
+
+To build a real Database Engine like Redis that handles thousands of concurrent connections, we must eventually implement:
+* **Non-Blocking I/O & Event Loops**: (The exact architecture Redis uses). Instead of blocking, we configure the sockets to be non-blocking. We then use an Event Loop (like `select`, `epoll`, or `kqueue`) to ask the OS: "Notify me the exact millisecond any of these 10,000 clients have data ready to read, otherwise I'll keep doing other work."
