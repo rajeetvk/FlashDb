@@ -119,3 +119,25 @@ We built a `Parser` class that uses C++'s `<sstream>` (String Stream) to automat
 The heart of an in-memory database is just a highly optimized hash map. We used C++'s `std::unordered_map<std::string, std::string>`.
 *   **Time Complexity:** Hash maps provide **O(1)** (constant time) average lookup speed. No matter if you have 10 keys or 10 million keys, it takes the exact same amount of time to `GET` or `SET` data.
 *   By making the `Database` an instance variable inside the `Server` class, every connected client interacts with the exact same data store in memory. When the server crashes or closes, the RAM is cleared and the data is lost (which is why persistence features like Append-Only Files are needed in production).
+
+---
+
+## 7. Performance Benchmarking & Concurrency Architecture
+
+While building this database engine, we ran a baseline performance benchmark using a PowerShell TCP client. 
+
+### Phase 1: Single-Threaded Architecture (Current Implementation)
+Currently, the database operates on a single thread. The `accept()` loop passes the connection to `handleClient()`, which blocks other users from connecting until the first client disconnects.
+*   **Benchmark Results:** Despite being single-threaded and blocking, the engine successfully processed **10,000 requests in 0.97 seconds**, achieving a throughput of **10,281 Requests/Second** with an average latency of **0.097 ms per request**.
+*   **The Bottleneck:** The primary bottleneck is the blocking `recv()` loop and console I/O (`std::cout`). While blazing fast for one user, it fundamentally cannot scale to concurrent users.
+
+### Phase 2: Multi-Threading & Mutexes (Upcoming)
+To solve the blocking issue, we can spawn a new `std::thread` for every client that connects.
+*   **The Concept:** The main thread's only job is to run `accept()`. When a client connects, it hires a "new worker" (thread) to run `handleClient()`. 
+*   **The Danger (Data Races):** If two threads attempt to write to the `std::unordered_map` at the exact same microsecond, they will collide in memory, causing a Segmentation Fault. We must implement a **Mutex** (Mutual Exclusion) to lock the database during writes.
+*   **The Downside:** Threads are heavy. Handling 10,000 concurrent clients requires 10,000 threads, which consumes massive amounts of RAM and crashes the Operating System (The C10k Problem).
+
+### Phase 3: I/O Multiplexing (The Redis Way)
+To achieve true production-scale performance, we avoid threads entirely.
+*   **The Concept:** We keep a single thread but set the sockets to "non-blocking." We then use an Event Loop (like `select()`, `epoll`, or `kqueue`) to ask the OS to notify us only when a socket has data ready to read.
+*   **The Result:** A single thread can juggle 100,000+ connected clients simultaneously with almost zero RAM overhead. This is the exact architecture used by the real Redis engine and Node.js.
