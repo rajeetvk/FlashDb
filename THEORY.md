@@ -101,3 +101,21 @@ Because `accept()` and `recv()` halt the program until something happens, a basi
 
 To build a real Database Engine like Redis that handles thousands of concurrent connections, we must eventually implement:
 * **Non-Blocking I/O & Event Loops**: (The exact architecture Redis uses). Instead of blocking, we configure the sockets to be non-blocking. We then use an Event Loop (like `select`, `epoll`, or `kqueue`) to ask the OS: "Notify me the exact millisecond any of these 10,000 clients have data ready to read, otherwise I'll keep doing other work."
+
+---
+
+## 6. Building the Core Database Engine
+
+To turn our simple network server into a functioning database engine, we modularized our architecture into three distinct components:
+
+### The Server (Network Layer)
+We upgraded the networking loop by wrapping the `accept()` function in an infinite `while(true)` loop. In the original version, when a single client disconnected, the entire server process would terminate. Now, when a client disconnects, the server gracefully closes their specific meeting room (`client_socket`) and loops back to the "receptionist" (`accept()`) to wait for the next connection.
+
+### The Parser (Translation Layer)
+Computers communicate over TCP streams using raw byte arrays (strings of text). If a client sends `SET mykey 100`, the server just sees a single string. 
+We built a `Parser` class that uses C++'s `<sstream>` (String Stream) to automatically split the raw input by spaces, converting it into an actionable `std::vector<std::string>` (e.g., `["SET", "mykey", "100"]`).
+
+### The Database (Storage Layer)
+The heart of an in-memory database is just a highly optimized hash map. We used C++'s `std::unordered_map<std::string, std::string>`.
+*   **Time Complexity:** Hash maps provide **O(1)** (constant time) average lookup speed. No matter if you have 10 keys or 10 million keys, it takes the exact same amount of time to `GET` or `SET` data.
+*   By making the `Database` an instance variable inside the `Server` class, every connected client interacts with the exact same data store in memory. When the server crashes or closes, the RAM is cleared and the data is lost (which is why persistence features like Append-Only Files are needed in production).
