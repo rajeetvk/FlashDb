@@ -1,6 +1,8 @@
 #include "server.h"
 #include <ws2tcpip.h>
 #include <stdio.h>
+#include <thread>
+
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -64,8 +66,10 @@ void Server::listenForClients() {
         }
         cout << "Client connected successfully" << endl;
 
-        // Pass the client to our handler method
-        handleClient(client_socket);
+        //pass the client to a new thread of execution
+        thread client_thread(&Server::handleClient,this,client_socket);
+        //detach creates a new thread of execution that runs independently of the main thread.
+        client_thread.detach();
     }
 }
 

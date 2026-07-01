@@ -139,16 +139,39 @@ Imagine a restaurant with only **one waiter**:
 4. Meanwhile, Client B arrives at the front door. Because there is only one waiter, Client B is completely **blocked** and ignored until Client A fully disconnects.
 
 Currently, the database operates on this single thread. The `accept()` loop passes the connection to `handleClient()`, which blocks other users from connecting until the first client leaves.
-*   **Benchmark Results:** Despite being single-threaded and blocking, the engine successfully processed **10,000 requests in 0.97 seconds**, achieving a throughput of **10,281 Requests/Second** with an average latency of **0.097 ms per request**.
+*   **Benchmark Results:** Despite being single-threaded and blocking, the engine successfully processed **10,000 requests in 0.97 seconds**, achieving a throughput of **10,281 Requests/Second** with an average latency of **0.097 ms per request**. *(Note: This benchmark was run for ONE client only, which is why it did not trigger the blocking problem).*
 *   **The Bottleneck:** The primary bottleneck is the blocking `recv()` loop and console I/O (`std::cout`). While blazing fast for one user, it fundamentally cannot scale to concurrent users.
 
-### Phase 2: Multi-Threading & Mutexes (Upcoming)
-To solve the blocking issue, we can spawn a new `std::thread` for every client that connects.
-*   **The Concept:** The main thread's only job is to run `accept()`. When a client connects, it hires a "new worker" (thread) to run `handleClient()`. 
-*   **The Danger (Data Races):** If two threads attempt to write to the `std::unordered_map` at the exact same microsecond, they will collide in memory, causing a Segmentation Fault. We must implement a **Mutex** (Mutual Exclusion) to lock the database during writes.
-*   **The Downside:** Threads are heavy. Handling 10,000 concurrent clients requires 10,000 threads, which consumes massive amounts of RAM and crashes the Operating System (The C10k Problem).
+### Phase 2: Multi-Threading & Mutexes (Current Implementation)
+To solve the blocking issue, we upgraded the server to spawn a new `std::thread` for every client that connects.
+*   **The Concept:** The main thread's only job is to run `accept()`. When a client connects, it hires a "new worker" (thread) to run `handleClient()` independently.
+
+**Code Snippet - Spawning Threads:**
+```cpp
+// Inside server.cpp
+std::thread client_thread(&Server::handleClient, this, client_socket);
+client_thread.detach(); // Detach allows it to run in the background
+```
+
+*   **The Danger (Data Races):** If two threads attempt to write to the `std::unordered_map` at the exact same microsecond, they will collide in memory, causing a Segmentation Fault. We implemented a **Mutex** (Mutual Exclusion) to lock the database during writes.
+
+**Code Snippet - Mutex Locks:**
+```cpp
+// Inside database.cpp
+void Database::set(string key, string value) {
+    std::lock_guard<std::mutex> lock(mtx); // Locks the cash register
+    store[key] = value;
+} // Automatically unlocks when the function ends
+```
+
+#### The Multi-Threading Benchmarks (The Trade-offs)
+We ran two separate benchmarks on this architecture to mathematically prove the downsides of threading.
+1. **The Overhead Test (1 Client):** Throughput dropped to **8,395 Requests/Second**. Because we added a Mutex, the single thread was forced to waste CPU cycles "turning the key" to lock and unlock the register 10,000 times, introducing *Base Mutex Overhead*.
+2. **The Contention Test (50 Simultaneous Clients):** Throughput dropped further to **5,951 Requests/Second**. With 50 threads fighting over a single Mutex lock, the Operating System spent more time managing the traffic jam (Context Switching) than processing data. This is known as *Lock Contention*.
+
+*   **The Conclusion:** While Multi-threading solved our blocking problem and allows 50 concurrent users, it sacrificed raw top-speed. Handling 10,000 concurrent clients this way would require 10,000 heavy threads, crashing the Operating System (The C10k Problem).
 
 ### Phase 3: I/O Multiplexing (The Redis Way)
-To achieve true production-scale performance, we avoid threads entirely.
+To achieve true production-scale performance, we must eventually avoid threads entirely.
 *   **The Concept:** We keep a single thread but set the sockets to "non-blocking." We then use an Event Loop (like `select()`, `epoll`, or `kqueue`) to ask the OS to notify us only when a socket has data ready to read.
 *   **The Result:** A single thread can juggle 100,000+ connected clients simultaneously with almost zero RAM overhead. This is the exact architecture used by the real Redis engine and Node.js.
