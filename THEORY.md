@@ -127,7 +127,18 @@ The heart of an in-memory database is just a highly optimized hash map. We used 
 While building this database engine, we ran a baseline performance benchmark using a PowerShell TCP client. 
 
 ### Phase 1: Single-Threaded Architecture (Current Implementation)
-Currently, the database operates on a single thread. The `accept()` loop passes the connection to `handleClient()`, which blocks other users from connecting until the first client disconnects.
+
+**What is "Single-Threaded"?**
+* **Definition:** A single-threaded process executes instructions in a single, strictly sequential order. In network programming, this means the server can only handle one operation (like reading data from one client) at any given time, forcing all other clients to wait in a blocked queue.
+* **The Restaurant Analogy:** Think of a thread as a single worker (a waiter). A thread can only execute one line of code at a time. 
+
+Imagine a restaurant with only **one waiter**:
+1. The waiter stands at the front door (`accept()`). Client A walks in.
+2. The waiter walks Client A to a table and waits for them to speak (`recv()`). 
+3. If Client A takes 5 minutes to send a command, the waiter stands permanently frozen at their table.
+4. Meanwhile, Client B arrives at the front door. Because there is only one waiter, Client B is completely **blocked** and ignored until Client A fully disconnects.
+
+Currently, the database operates on this single thread. The `accept()` loop passes the connection to `handleClient()`, which blocks other users from connecting until the first client leaves.
 *   **Benchmark Results:** Despite being single-threaded and blocking, the engine successfully processed **10,000 requests in 0.97 seconds**, achieving a throughput of **10,281 Requests/Second** with an average latency of **0.097 ms per request**.
 *   **The Bottleneck:** The primary bottleneck is the blocking `recv()` loop and console I/O (`std::cout`). While blazing fast for one user, it fundamentally cannot scale to concurrent users.
 
