@@ -18,5 +18,5 @@ public:
     
     bool start();
     void listenForClients();
-    void handleClient(SOCKET client_socket);
+    bool handleClient(SOCKET client_socket);
 };

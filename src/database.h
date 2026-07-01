@@ -1,6 +1,6 @@
 #include<string>
 #include<unordered_map>
-#include <mutex>
+
 using namespace std;
 
 #pragma once
@@ -9,8 +9,7 @@ class Database
 {
     private:
     unordered_map<string,string>store;
-    mutex mtx;
-
+   
     public:
     void set(string key,string value);
     string get(string key);

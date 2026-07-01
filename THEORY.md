@@ -142,8 +142,8 @@ Currently, the database operates on this single thread. The `accept()` loop pass
 *   **Benchmark Results:** Despite being single-threaded and blocking, the engine successfully processed **10,000 requests in 0.97 seconds**, achieving a throughput of **10,281 Requests/Second** with an average latency of **0.097 ms per request**. *(Note: This benchmark was run for ONE client only, which is why it did not trigger the blocking problem).*
 *   **The Bottleneck:** The primary bottleneck is the blocking `recv()` loop and console I/O (`std::cout`). While blazing fast for one user, it fundamentally cannot scale to concurrent users.
 
-### Phase 2: Multi-Threading & Mutexes (Current Implementation)
-To solve the blocking issue, we upgraded the server to spawn a new `std::thread` for every client that connects.
+### Phase 2: Multi-Threading & Mutexes (Archived in `v2-multi-threaded`)
+To solve the blocking issue, we temporarily upgraded the server to spawn a new `std::thread` for every client that connects.
 *   **The Concept:** The main thread's only job is to run `accept()`. When a client connects, it hires a "new worker" (thread) to run `handleClient()` independently.
 
 **Code Snippet - Spawning Threads:**
@@ -171,7 +171,20 @@ We ran two separate benchmarks on this architecture to mathematically prove the 
 
 *   **The Conclusion:** While Multi-threading solved our blocking problem and allows 50 concurrent users, it sacrificed raw top-speed. Handling 10,000 concurrent clients this way would require 10,000 heavy threads, crashing the Operating System (The C10k Problem).
 
-### Phase 3: I/O Multiplexing (The Redis Way)
-To achieve true production-scale performance, we must eventually avoid threads entirely.
-*   **The Concept:** We keep a single thread but set the sockets to "non-blocking." We then use an Event Loop (like `select()`, `epoll`, or `kqueue`) to ask the OS to notify us only when a socket has data ready to read.
-*   **The Result:** A single thread can juggle 100,000+ connected clients simultaneously with almost zero RAM overhead. This is the exact architecture used by the real Redis engine and Node.js.
+### Phase 3: I/O Multiplexing Event Loop (Current Implementation)
+To achieve true production-scale performance and overcome the C10k Problem, we fired the extra threads and returned to a Single-Threaded architecture, but replaced the blocking loops with an **Event Loop**.
+*   **The Concept:** We use the `select()` function to create a "Master List" (`fd_set`) of all connected client sockets. Instead of blocking on a single client, the main thread sleeps and asks the Operating System to wake it up the exact microsecond *any* socket on the list has data ready to read.
+*   **The Result:** A single thread can juggle thousands of connected clients simultaneously with almost zero RAM overhead. Because there is only one thread, it is physically impossible to have a data race, allowing us to completely delete the Mutex lock and eliminate Context Switching. 
+
+#### How the Event Loop Works (The Mechanics)
+An Event Loop fundamentally changes how the server waits for data. Instead of assigning a thread to wait at a specific socket (which blocks execution), we use **I/O Multiplexing**.
+1. **The Roster (`fd_set`):** We maintain a master list of all active file descriptors (sockets), including the main `server_socket` (the "front door") and all connected client sockets.
+2. **The `select()` Call:** The single thread calls `select()`, which hands the roster to the Operating System and puts the thread to sleep. While the thread sleeps, the OS hardware (the Network Interface Card) efficiently monitors the incoming network packets in the background.
+3. **The Wake-Up Call:** The exact microsecond the OS detects incoming data on *any* of the sockets, it wakes up the thread and provides an array of exactly which sockets have data ready.
+4. **The Loop:** The thread loops through those specific sockets, instantly reads the data, updates the `unordered_map`, and then immediately loops back to `select()` to wait for the next event. 
+
+Because the thread is only awake when there is guaranteed, actionable data, the CPU never wastes time waiting. Furthermore, because it delegates the waiting to the physical hardware rather than a software loop, it is incredibly power efficient.
+
+#### Phase 3 Benchmark (The Redis Way)
+*   **Benchmark Results:** The Event Loop achieved a peak throughput of **11,127 Requests/Second** while successfully handling 50 simultaneous clients. 
+*   **Note on Variance (OS Jitter):** Repeated benchmark runs show normal variance (between 9.3k and 11.1k Req/Sec) due to OS CPU scheduling and background process jitter. However, the magnitude consistently demonstrates a ~2x performance increase over the Phase 2 Mutex architecture, proving the massive efficiency of I/O Multiplexing.
