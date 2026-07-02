@@ -188,3 +188,35 @@ Because the thread is only awake when there is guaranteed, actionable data, the 
 #### Phase 3 Benchmark (The Redis Way)
 *   **Benchmark Results:** The Event Loop achieved a peak throughput of **11,127 Requests/Second** while successfully handling 50 simultaneous clients. 
 *   **Note on Variance (OS Jitter):** Repeated benchmark runs show normal variance (between 9.3k and 11.1k Req/Sec) due to OS CPU scheduling and background process jitter. However, the magnitude consistently demonstrates a ~2x performance increase over the Phase 2 Mutex architecture, proving the massive efficiency of I/O Multiplexing.
+
+---
+
+## 8. Data Persistence (Crash Recovery)
+In an in-memory database, the core storage mechanism (`std::unordered_map`) lives entirely in RAM. While RAM is lightning-fast, it is **volatile**. If the server process terminates or loses power, all data vanishes. 
+
+To make the database production-grade, it must bridge the gap between the speed of RAM and the safety of a Hard Drive. 
+
+### Strategy 1: Snapshotting (RDB)
+*   **How it works:** Periodically (e.g., every 5 minutes), the server pauses and copies the entire `unordered_map` to a `.rdb` file on the hard drive.
+*   **The Flaw:** If the server crashes at minute 4, you permanently lose 4 minutes of data because the snapshot was not taken yet.
+
+### Strategy 2: Append-Only File (AOF) - *Our Implementation*
+Instead of saving the *data*, we record the *commands*. 
+*   **How it works:** Every time a client successfully runs a `SET` or `DEL` command, the server instantly appends that exact command to the bottom of a text file (`database.aof`).
+*   **The Recovery:** When the server boots up, the `Database` constructor opens `database.aof` in read mode. It acts like a "ghost client", reading the file from top to bottom and re-running every single `SET` and `DEL` command. By the time it reaches the end of the file, the RAM is perfectly rebuilt exactly as it was before the crash.
+
+### Strict Durability: Write-Ahead Logging (WAL)
+We implemented AOF using the **Write-Ahead Logging** architecture (the strict durability strategy used by PostgreSQL). 
+
+**The Dilemma (Why not update RAM first?):**
+If a database updates RAM first and then attempts to save to the Hard Drive, there is a microscopic window of vulnerability. If the server loses power in the exact microsecond *between* updating RAM and writing to the disk, the data is lost forever. Worse, if the server sent a +OK response to the client during this window, the client incorrectly assumes their data is safe. This creates silent data corruption.
+
+**The Solution (The PostgreSQL Way):**
+To guarantee absolute durability, we must write to the Hard Drive *first*. 
+The exact order of operations in our `Database::set()` function is:
+1. **Write to Disk First:** Append the command (`SET mykey 100`) to the `.aof` file.
+2. **Force Flush:** Call `aof_file.flush()` to force the Operating System to physically write the data to the magnetic disk/SSD immediately, bypassing the OS memory buffer.
+3. **Update RAM Second:** Only after the Hard Drive write is guaranteed successful, we update the `unordered_map`.
+4. **Respond:** Send `+OK` to the client.
+
+By explicitly choosing the PostgreSQL route, it is physically impossible for the client to receive a false `+OK`. RAM acts strictly as a blazing-fast "read cache" that perfectly mirrors the truth of the Hard Drive.

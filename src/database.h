@@ -1,5 +1,6 @@
 #include<string>
 #include<unordered_map>
+#include <fstream>
 
 using namespace std;
 
@@ -9,8 +10,11 @@ class Database
 {
     private:
     unordered_map<string,string>store;
-   
+    ofstream aof_file;
+
     public:
+    Database();
+    ~Database();
     void set(string key,string value);
     string get(string key);
     void del(string key);
