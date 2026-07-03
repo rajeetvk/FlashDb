@@ -115,6 +115,9 @@ We upgraded the networking loop by wrapping the `accept()` function in an infini
 Computers communicate over TCP streams using raw byte arrays (strings of text). If a client sends `SET mykey 100`, the server just sees a single string. 
 We built a `Parser` class that uses C++'s `<sstream>` (String Stream) to automatically split the raw input by spaces, converting it into an actionable `std::vector<std::string>` (e.g., `["SET", "mykey", "100"]`).
 
+*   **The Current Limitation (Binary Safety):** Parsing by spaces works perfectly for basic text, but it fundamentally breaks if a user tries to store a sentence containing spaces (e.g., `SET message "Hello World"` incorrectly splits into 4 pieces). Furthermore, if a user attempts to store a raw binary file (like a JPEG image), the image data will contain invisible space characters and null bytes, completely corrupting the file when the parser attempts to split it.
+*   **The Solution (RESP):** To achieve true binary safety and full ecosystem compatibility with official Redis tools (like the `redis-cli`), the database must eventually adopt the **REdis Serialization Protocol (RESP)**. RESP uses strict length-prefixing (telling the server exactly how many bytes to read) rather than blindly searching for spaces.
+
 ### The Database (Storage Layer)
 The heart of an in-memory database is just a highly optimized hash map. We used C++'s `std::unordered_map<std::string, std::string>`.
 *   **Time Complexity:** Hash maps provide **O(1)** (constant time) average lookup speed. No matter if you have 10 keys or 10 million keys, it takes the exact same amount of time to `GET` or `SET` data.
