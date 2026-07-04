@@ -121,7 +121,7 @@ bool Server::handleClient(SOCKET client_socket)
     if (bytes_recieved > 0)
     {
         Parser parser;
-        vector<string>tokens=parser.split(buffer);
+        vector<string>tokens=parser.parse(buffer);
         if(tokens.size()>0)
         {
             string command=tokens[0];

@@ -9,6 +9,7 @@ using namespace std;
 class Parser{
     public:
 
+    vector<string> parse(string input);
     vector<string> split(string input);
 
 };
