@@ -223,3 +223,48 @@ The exact order of operations in our `Database::set()` function is:
 4. **Respond:** Send `+OK` to the client.
 
 By explicitly choosing the PostgreSQL route, it is physically impossible for the client to receive a false `+OK`. RAM acts strictly as a blazing-fast "read cache" that perfectly mirrors the truth of the Hard Drive.
+
+---
+
+## 9. The REdis Serialization Protocol (RESP)
+To transition from a custom C++ experiment to a true, industry-standard Redis Clone, the server must implement **RESP**. RESP is the official networking language used by Redis.
+
+### Why do we need RESP? (The Flaw of Space-Splitting)
+Initially, our parser decoded commands by splitting the raw text at every space character (e.g., `SET name Raj` became `["SET", "name", "Raj"]`). While this works for simple commands, it creates two major architectural flaws:
+1. **No Spaces Allowed:** If a client tries to save a sentence (e.g., `SET message "Hello World"`), the parser splits it into 4 incorrect pieces.
+2. **Not Binary Safe:** If a client attempts to save a raw binary file (like a JPEG image), the binary data will contain invisible spaces, null bytes (`\0`), and carriage returns. The space-splitter would instantly corrupt the binary data.
+
+### The Solution: Length-Prefixing
+Instead of blindly searching for spaces, RESP requires the client to send a structured package that strictly declares the **exact length** (in bytes) of every word. Because the server knows exactly how many bytes to read, it safely ignores spaces, quotes, and binary gibberish, making the protocol **100% Binary Safe**.
+
+### RESP Syntax and Structure
+In RESP, every line must end with `\r\n` (Carriage Return + Line Feed). The very first character of the line tells the server what type of data to expect.
+
+The 5 Core RESP Symbols:
+1. `+` **Simple Strings:** Used for simple success messages (e.g., `+OK\r\n`).
+2. `-` **Errors:** Used when a command fails. The `-` symbol acts as a dedicated error flag. Official clients instantly recognize it and throw exceptions in red text (e.g., `-ERR unknown command\r\n`).
+3. `:` **Integers:** Used for returning numbers (e.g., `:1000\r\n`).
+4. `$` **Bulk Strings:** Used for sending actual data. It provides the length of the string, followed by the string itself. (e.g., `$5\r\nHello\r\n`).
+5. `*` **Arrays:** Used for sending lists of data, primarily used by the client to send commands. (e.g., `*3\r\n` means an array of 3 Bulk Strings).
+
+### Example: Translating a Command
+If you type `SET name Raj` into the official `redis-cli`, the CLI secretly converts it into the following RESP payload before transmitting it over TCP:
+
+```text
+*3\r\n
+$3\r\n
+SET\r\n
+$4\r\n
+name\r\n
+$3\r\n
+Raj\r\n
+```
+
+**How the C++ Server Parses It:**
+1. Sees `*3`: Expects an array of 3 words.
+2. Sees `$3`: Extracts exactly 3 bytes -> `SET`
+3. Sees `$4`: Extracts exactly 4 bytes -> `name`
+4. Sees `$3`: Extracts exactly 3 bytes -> `Raj`
+
+### Ecosystem Compatibility
+By implementing RESP, the custom C++ server immediately becomes a **Drop-in Replacement** for the real Redis. This means you can use official tools like `redis-cli`, RedisInsight (Visual GUI), and standard Node.js/Python Redis libraries to communicate with the custom database, proving its flawless adherence to industry network specifications.
