@@ -19998,3 +19998,8 @@ SET benchkey 99
 SET benchkey 99
 SET benchkey 99
 SET benchkey 99
+SET A 1
+SET B 2
+SET C 3
+SET D 4
+SET E 5

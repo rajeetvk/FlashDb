@@ -4,6 +4,7 @@ using namespace std;
 
 Database::Database()
 {
+     capacity=4;
     ifstream in_file("database.aof");
     if(in_file.is_open())
     {
@@ -17,11 +18,11 @@ Database::Database()
             {
                 if(tokens[0]=="SET" && tokens.size()>=3)
                 {
-                   store[tokens[1]] = tokens[2];
+                   set(tokens[1], tokens[2]);
                 }
                 else if(tokens[0]=="DEL" && tokens.size()>=2)
                 {
-                    store.erase(tokens[1]);
+                    del(tokens[1]);
                 }
             }
         }
@@ -49,9 +50,21 @@ void Database::set(string key,string value)
         aof_file<<"SET "<<key<<" "<<value<<endl;
         aof_file.flush();
     }
-   
+   if(store.find(key)!=store.end())
+   {
+    store[key].first=value;
+    lru_dll.splice(lru_dll.begin(), lru_dll, store[key].second);
+    return;
+   }
+   if(store.size()>=capacity)
+   {
+    string oldest=lru_dll.back();
+    lru_dll.pop_back();
+    store.erase(oldest);
+   }
+   lru_dll.push_front(key);
 
-    store[key]=value;
+    store[key]={value,lru_dll.begin()};
 }
 
 string Database::get(string key)
@@ -59,7 +72,8 @@ string Database::get(string key)
    
     if(store.find(key)!=store.end())
     {
-        return store[key];
+        lru_dll.splice(lru_dll.begin(),lru_dll,store[key].second);
+        return store[key].first;
     }
     else
     {
@@ -73,6 +87,9 @@ void Database::del(string key)
         aof_file<<"DEL"<<key<<endl;
         aof_file.flush();
     }
-   
-    store.erase(key);
+   if(store.find(key)!=store.end())
+   {
+       lru_dll.erase(store[key].second);
+       store.erase(key);
+   }
 }

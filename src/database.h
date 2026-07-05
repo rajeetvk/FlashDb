@@ -1,6 +1,9 @@
 #include<string>
 #include<unordered_map>
 #include <fstream>
+#include <iostream>
+#include <list>
+#include <utility>
 
 using namespace std;
 
@@ -9,8 +12,11 @@ using namespace std;
 class Database
 {
     private:
-    unordered_map<string,string>store;
+    
+    list<string>lru_dll;
+    unordered_map<string,pair<string,list<string>::iterator>>store;
     ofstream aof_file;
+    int capacity;
 
     public:
     Database();
@@ -20,5 +26,4 @@ class Database
     void del(string key);
 };
 
-// The Database class will handle the in-memory key-value store (std::unordered_map)
-// It will have methods like get(), set(), and del()
+
