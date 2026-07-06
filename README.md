@@ -5,10 +5,10 @@ FlashDb is a high-performance, in-memory key-value database engine written entir
 ## The Name: FlashDb
 The name "FlashDb" represents the database's primary architectural goal: lightning-fast, sub-millisecond data processing. By keeping the active dataset entirely in RAM and utilizing Non-Blocking I/O Multiplexing, the engine achieves read and write speeds comparable to a literal flash, bypassing the latency bottlenecks of traditional hard-drive-based databases.
 
-## Architecture and Theory
-This repository serves as a deep dive into advanced Systems Engineering and Computer Science concepts. The complete architectural documentation, including design trade-offs, is available in the project documentation.
+## Architecture and Learnings
+Every core Computer Science concept, Systems Architecture design pattern, and engineering trade-off I learned while building this database engine from scratch is thoroughly documented in this repository.
 
-Please read [THEORY.md](./THEORY.md) for a comprehensive breakdown of the engine's mechanics, including:
+Please read [THEORY.md](./THEORY.md) for my complete learning notes and a comprehensive breakdown of the engine's mechanics, including:
 * Non-Blocking I/O Multiplexing (Event Loops)
 * Write-Ahead Logging (AOF Persistence)
 * RESP (REdis Serialization Protocol) Implementation
