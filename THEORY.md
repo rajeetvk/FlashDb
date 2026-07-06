@@ -560,3 +560,18 @@ To solve this, production engines (like Redis) implement an **AOF Rewrite** mech
 To fully replicate the professional database experience, this project includes a custom-built interactive client (`flashdb-cli`). 
 
 Rather than relying on automated PowerShell scripts or third-party diagnostic GUIs, the `flashdb-cli` is a dedicated C++ executable that establishes a persistent TCP stream with the database engine. It acts as a REPL (Read-Eval-Print Loop), intercepting human-readable commands (e.g., `SET`, `GET`), wrapping them in the RESP network termination sequence (`\r\n`), and streaming them to the server. By managing its own Windows socket (`WSADATA`) and maintaining a continuous `recv()` loop, the client provides a lightning-fast, zero-latency prompt that perfectly mimics the behavior of `redis-cli` or `mysql -u root`.
+
+---
+
+## 13. Algorithmic Complexity (Big-O Analysis)
+To qualify as a high-performance database engine, every core operation must execute in constant time. FlashDb achieves this through the tight coupling of a Hash Map (`std::unordered_map`) and a Doubly Linked List (`std::list`).
+
+### Time Complexity: `O(1)`
+* **`GET` - `O(1)`:** Retrieving a key involves a single hash map lookup `O(1)`. Updating its LRU position is achieved via `std::list::splice()`, which merely rearranges node pointers in the linked list without memory reallocation or shifting, remaining `O(1)`.
+* **`SET` - `O(1)`:** Inserting a new value into the hash map and calling `push_front()` on the linked list are both `O(1)`. If the database is full, LRU Eviction triggers `pop_back()` on the list and `erase()` on the map, which are also strictly `O(1)`.
+* **`DEL` - `O(1)`:** The hash map provides `O(1)` access to the exact `iterator` (memory address) of the linked list node. The node is erased from the linked list directly `O(1)` and erased from the map `O(1)`.
+* **`EXPIRE` - `O(1)`:** Setting a TTL simply looks up the key in the hash map `O(1)` and mutates the `expire_time` long integer within its struct in-place `O(1)`.
+
+### Space Complexity: `O(N)`
+* **`O(N)`** where `N` is the hardcoded memory `capacity` limit of the database.
+* By enforcing strict LRU eviction, the space complexity is tightly bounded by the capacity. This prevents the space complexity from growing to `O(M)` (where `M` is total historical traffic) and guarantees the server will never crash the Operating System due to an Out-Of-Memory (OOM) fatal error.
