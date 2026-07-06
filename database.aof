@@ -20003,3 +20003,6 @@ SET B 2
 SET C 3
 SET D 4
 SET E 5
+SET secret 99
+EXPIRE secret 5
+DELsecret

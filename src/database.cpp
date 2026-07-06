@@ -52,8 +52,9 @@ void Database::set(string key,string value)
     }
    if(store.find(key)!=store.end())
    {
-    store[key].first=value;
-    lru_dll.splice(lru_dll.begin(), lru_dll, store[key].second);
+    store[key].value=value;
+    lru_dll.splice(lru_dll.begin(), lru_dll, store[key].lru_it);
+    store[key].expire_time=0;
     return;
    }
    if(store.size()>=capacity)
@@ -64,7 +65,7 @@ void Database::set(string key,string value)
    }
    lru_dll.push_front(key);
 
-    store[key]={value,lru_dll.begin()};
+    store[key]={value,lru_dll.begin(),0};
 }
 
 string Database::get(string key)
@@ -72,8 +73,15 @@ string Database::get(string key)
    
     if(store.find(key)!=store.end())
     {
-        lru_dll.splice(lru_dll.begin(),lru_dll,store[key].second);
-        return store[key].first;
+        long long current_time=chrono::system_clock::now().time_since_epoch()/chrono :: seconds(1);
+        if(store[key].expire_time != 0 && current_time >= store[key].expire_time)
+        {
+            del(key);
+            return "";
+        }
+
+        lru_dll.splice(lru_dll.begin(),lru_dll,store[key].lru_it);
+        return store[key].value;
     }
     else
     {
@@ -89,7 +97,21 @@ void Database::del(string key)
     }
    if(store.find(key)!=store.end())
    {
-       lru_dll.erase(store[key].second);
+       lru_dll.erase(store[key].lru_it);
        store.erase(key);
    }
+}
+void Database::expire(string key,int seconds)
+{
+    if(store.find(key)!=store.end())
+    {
+        long long current_time=chrono::system_clock::now().time_since_epoch()/chrono::seconds(1);
+        long long death_time=current_time+seconds;
+        store[key].expire_time=death_time;
+        if(aof_file.is_open())
+        {
+            aof_file << "EXPIRE " << key << " " << seconds << endl;
+            aof_file.flush();
+        }
+    }
 }

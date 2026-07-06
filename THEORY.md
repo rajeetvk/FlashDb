@@ -518,6 +518,18 @@ Unlike LRU (which depends entirely on memory capacity limits), TTL is a strict p
 
 In code, this natural expiration is handled via **Lazy Expiration** (the server checks the timestamp and deletes the key the exact moment a client tries to `GET` it) and **Active Expiration** (a background thread wakes up periodically to sample and delete expired keys). Both mechanisms explicitly synthesize and append a `DEL` command to the `.aof` file when they catch an expired key.
 
+#### Our C++ Implementation
+To achieve this in our custom database engine, we upgraded the `std::unordered_map` to store a custom `CacheItem` struct instead of a standard string pair.
+```cpp
+struct CacheItem {
+    std::string value;
+    std::list<std::string>::iterator lru_it;
+    long long expire_time; // Absolute Unix Timestamp
+};
+```
+By utilizing `<chrono>`, we successfully implemented strict **Lazy Expiration** in `O(1)` time. Whenever a client calls `GET`, the server evaluates the `expire_time`. If the current clock has surpassed the timestamp, the server intercepts the request, instantly executes an internal `del()` operation (which correctly syncs the deletion to the `.aof` file), and returns `null` to the client.
+
+
 ### The AOF Bloat Problem (BGREWRITEAOF)
 Since the `.aof` file accurately records every `SET` and `DEL` command, a server running for 6 months will generate millions of lines of history for keys that no longer exist. If the server crashes, replaying this massive file would take hours, mindlessly recreating and deleting data just to end up with an empty state. This is known as **AOF Bloat**.
 

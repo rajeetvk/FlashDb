@@ -151,6 +151,18 @@ bool Server::handleClient(SOCKET client_socket)
                 string response="+OK\r\n";
                 send(client_socket,response.c_str(),response.length(),0);
             }
+            else if(command=="EXPIRE" && tokens.size()>=3)
+            {
+                try {
+                    int seconds = stoi(tokens[2]);
+                    db.expire(tokens[1], seconds);
+                    string response = "+OK\r\n";
+                    send(client_socket, response.c_str(), response.length(), 0);
+                } catch (...) {
+                    string error = "-ERR invalid expire time\r\n";
+                    send(client_socket, error.c_str(), error.length(), 0);
+                }
+            }
             else
             {
                 string error = "-ERR wrong number of arguments\r\n";
