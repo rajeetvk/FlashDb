@@ -14,6 +14,12 @@ Please read [THEORY.md](./THEORY.md) for my complete learning notes and a compre
 * RESP (REdis Serialization Protocol) Implementation
 * O(1) LRU (Least Recently Used) Cache Eviction
 * Lazy Expiration (TTL) Memory Management
+## Supported Commands (Operations)
+The current architecture supports the following core Redis commands:
+* **`SET <key> <value>`**: Stores a string value in the database.
+* **`GET <key>`**: Retrieves the value associated with a key (`O(1)` time).
+* **`DEL <key>`**: Deletes a key from the database.
+* **`EXPIRE <key> <seconds>`**: Sets a Time-To-Live (TTL). The key will be automatically deleted after the specified number of seconds.
 
 ## How to Run (Windows)
 
