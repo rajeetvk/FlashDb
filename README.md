@@ -33,24 +33,19 @@ Execute the compiled binary to start the database engine on port 6379.
 .\server.exe
 ```
 
-**3. Test the Connection:**
-While the server is running, open a new PowerShell window and use the following script to connect to the database via a raw TCP stream and execute commands (SET, GET, EXPIRE, DEL).
+**3. Connect with the Interactive CLI:**
+This repository includes a custom-built, interactive Command Line Interface (`flashdb-cli`) to interact with the database natively, exactly like `redis-cli`. 
+Open a new terminal window (keep the server running in the background) and compile the client:
+```bash
+g++ src/client.cpp -o flashdb-cli -lws2_32
+```
 
-```powershell
-$tcp = New-Object System.Net.Sockets.TcpClient("127.0.0.1", 6379)
-$stream = $tcp.GetStream()
-$writer = New-Object System.IO.StreamWriter($stream)
-$reader = New-Object System.IO.StreamReader($stream)
+Launch the client to start sending commands (`SET`, `GET`, `DEL`, `EXPIRE`):
+```bash
+.\flashdb-cli.exe
 
-# Test SET command
-$writer.WriteLine("SET mykey 100")
-$writer.Flush()
-Write-Host "Server replied:" $reader.ReadLine()
-
-# Test GET command
-$writer.WriteLine("GET mykey")
-$writer.Flush()
-Write-Host "Server replied:" $reader.ReadLine()
-
-$tcp.Close()
+flashdb> SET name FlashDb
++OK
+flashdb> GET name
+FlashDb
 ```

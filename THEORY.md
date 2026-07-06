@@ -535,3 +535,9 @@ Since the `.aof` file accurately records every `SET` and `DEL` command, a server
 
 To solve this, production engines (like Redis) implement an **AOF Rewrite** mechanism (`BGREWRITEAOF`). When the `.aof` file grows too large, the server forks a background process that completely ignores the bloated history file. Instead, it looks only at the current state of the RAM and generates a brand new, microscopic `.aof` file containing only the exact `SET` commands needed to reconstruct the surviving data. It then safely swaps the files, ensuring near-instantaneous crash recovery regardless of server uptime.
 
+---
+
+## 12. The Interactive CLI (Command Line Interface)
+To fully replicate the professional database experience, this project includes a custom-built interactive client (`flashdb-cli`). 
+
+Rather than relying on automated PowerShell scripts or third-party diagnostic GUIs, the `flashdb-cli` is a dedicated C++ executable that establishes a persistent TCP stream with the database engine. It acts as a REPL (Read-Eval-Print Loop), intercepting human-readable commands (e.g., `SET`, `GET`), wrapping them in the RESP network termination sequence (`\r\n`), and streaming them to the server. By managing its own Windows socket (`WSADATA`) and maintaining a continuous `recv()` loop, the client provides a lightning-fast, zero-latency prompt that perfectly mimics the behavior of `redis-cli` or `mysql -u root`.
