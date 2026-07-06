@@ -6,6 +6,25 @@ To understand how a database server works under the hood, you need to understand
 
 ---
 
+## 0. High-Level System Architecture
+Before diving into the low-level C++ code, here is a visual representation of how data flows through the FlashDb engine:
+
+```mermaid
+graph TD
+    Client[Client (flashdb-cli / redis-cli)] -->|TCP Socket (Port 6379)| Server[Server Event Loop]
+    Server -->|RESP Parsing| Parser[RESP Protocol Parser]
+    Parser -->|Parsed Commands| DB[Database Engine]
+    
+    subgraph In-Memory Data Store (RAM)
+        DB --> HashMap[O 1 Hash Map]
+        DB --> LRU[Doubly Linked List]
+        HashMap -.->|Iterators| LRU
+    end
+    
+    DB -->|Write-Ahead Log| Disk[database.aof (Hard Drive)]
+```
+---
+
 ## 1. Why `WSAStartup` and `WSACleanup`? (Windows Only)
 
 If you were writing this server on Linux or a Mac, networking is built directly into the core operating system kernel. When you boot Linux, sockets are ready to go immediately.
