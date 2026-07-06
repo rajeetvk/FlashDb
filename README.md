@@ -21,6 +21,12 @@ The current architecture supports the following core Redis commands:
 * **`DEL <key>`**: Deletes a key from the database.
 * **`EXPIRE <key> <seconds>`**: Sets a Time-To-Live (TTL). The key will be automatically deleted after the specified number of seconds.
 
+## Configuration (LRU Capacity)
+To easily demonstrate and test the O(1) LRU eviction policy, the database is currently hardcoded to a maximum capacity of **4 keys**. 
+If you insert a 5th key, the least recently used key will be instantly evicted from memory. 
+
+You can increase this capacity for production use by modifying the `capacity` variable in the `Database` constructor inside `src/database.cpp`.
+
 ## How to Run (Windows)
 
 **Prerequisites:**
