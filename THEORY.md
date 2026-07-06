@@ -498,3 +498,28 @@ The AOF file perfectly records every `SET` and `DEL` command. However, we delibe
 *   **The Justification:** This is an intentional, industry-standard compromise used by the real Redis engine. The entire purpose of an in-memory database is to provide sub-millisecond reads (~100 nanoseconds). If the server was forced to perform a Hard Drive Write (~2,000,000 nanoseconds) every time a client called `GET`, read performance would be completely destroyed. 
 
 In systems engineering, losing the exact LRU queue order during a crash is considered "acceptable data loss" in order to preserve blazing-fast read performance, so long as the core data itself is safely recovered.
+
+---
+
+## 11. Advanced Persistence and Expiration Mechanics
+
+As an in-memory database scales, managing the strict boundary between RAM (the active dataset) and the Hard Drive (the recovery journal) introduces several complex architectural challenges.
+
+### The Single Source of Truth
+When an LRU cache successfully evicts a key from RAM, a natural question arises: *Because the key was originally written to the `.aof` file, why doesn't the database simply fetch the key from the `.aof` file when a user requests it?*
+
+This highlights the fundamental rule of an in-memory database: **The RAM is the only source of truth.** 
+Traditional databases (like MySQL) use the hard drive as the primary storage. In contrast, an in-memory database treats the `.aof` file strictly as a **Write-Only Disaster Recovery Journal**. During normal operation, the server never reads from the `.aof` file. When a client sends a `GET` request, the database only checks the RAM (the `std::unordered_map`). If the key was evicted by the LRU policy, the database immediately returns `null`. Fetching data from the hard drive would introduce massive latency, defeating the entire purpose of an ultra-fast cache. The `.aof` file is read exactly once: during the server's initial boot sequence.
+
+### TTL (Time-To-Live) vs LRU Eviction
+While LRU protects the server from running out of hardware resources (RAM), **TTL (Time-To-Live)** is used to expire data based on absolute time (e.g., expiring a user session after 24 hours). 
+
+Unlike LRU (which depends entirely on memory capacity limits), TTL is a strict property of the data itself. Because of this, TTL expirations *must* be logged to the `.aof` file to survive server crashes. However, writing `EXPIRE key 60` to the `.aof` file creates a vulnerability: if the server is offline for 5 minutes and reboots, replaying that command would grant the key another 60 seconds of life. To prevent resurrecting dead data, standard databases convert the TTL into an absolute Unix timestamp (e.g., `EXPIREAT key 1717590000`). When the server boots up, it compares the timestamp in the `.aof` file to the current OS clock, instantly deleting the key if the time has passed.
+
+In code, this natural expiration is handled via **Lazy Expiration** (the server checks the timestamp and deletes the key the exact moment a client tries to `GET` it) and **Active Expiration** (a background thread wakes up periodically to sample and delete expired keys). Both mechanisms explicitly synthesize and append a `DEL` command to the `.aof` file when they catch an expired key.
+
+### The AOF Bloat Problem (BGREWRITEAOF)
+Since the `.aof` file accurately records every `SET` and `DEL` command, a server running for 6 months will generate millions of lines of history for keys that no longer exist. If the server crashes, replaying this massive file would take hours, mindlessly recreating and deleting data just to end up with an empty state. This is known as **AOF Bloat**.
+
+To solve this, production engines (like Redis) implement an **AOF Rewrite** mechanism (`BGREWRITEAOF`). When the `.aof` file grows too large, the server forks a background process that completely ignores the bloated history file. Instead, it looks only at the current state of the RAM and generates a brand new, microscopic `.aof` file containing only the exact `SET` commands needed to reconstruct the surviving data. It then safely swaps the files, ensuring near-instantaneous crash recovery regardless of server uptime.
+
