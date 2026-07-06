@@ -11,17 +11,17 @@ Before diving into the low-level C++ code, here is a visual representation of ho
 
 ```mermaid
 graph TD
-    Client[Client (flashdb-cli / redis-cli)] -->|TCP Socket (Port 6379)| Server[Server Event Loop]
-    Server -->|RESP Parsing| Parser[RESP Protocol Parser]
-    Parser -->|Parsed Commands| DB[Database Engine]
+    Client["Client (flashdb-cli / redis-cli)"] -->|"TCP Socket (Port 6379)"| Server["Server Event Loop"]
+    Server -->|"RESP Parsing"| Parser["RESP Protocol Parser"]
+    Parser -->|"Parsed Commands"| DB["Database Engine"]
     
-    subgraph In-Memory Data Store (RAM)
-        DB --> HashMap[O 1 Hash Map]
-        DB --> LRU[Doubly Linked List]
-        HashMap -.->|Iterators| LRU
+    subgraph RAM["In-Memory Data Store (RAM)"]
+        DB --> HashMap["O(1) Hash Map"]
+        DB --> LRU["Doubly Linked List"]
+        HashMap -.->|"Iterators"| LRU
     end
     
-    DB -->|Write-Ahead Log| Disk[database.aof (Hard Drive)]
+    DB -->|"Write-Ahead Log"| Disk["database.aof (Hard Drive)"]
 ```
 ---
 
